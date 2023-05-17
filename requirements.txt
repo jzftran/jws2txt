@@ -1,2 +1,2 @@
 numpy
-olefile
+olefile-0.46
