@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jws2txt_jzftran"
-version = "0.0.2c"
+version = "0.0.7"
 authors = [
   { name="Józef Tran", email="jozeftran@gmail.com" },
 ]
@@ -21,7 +21,7 @@ classifiers = [
 ]
 
 [project.scripts]
-jws2txt = "jws2txt:main"
+jws2txt = "jws2txt.jws2txt:main"
 
 [project.urls]
 "Homepage" = "https://github.com/jzftran/jws2txt"
