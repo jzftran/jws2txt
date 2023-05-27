@@ -1,0 +1,28 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[project]
+name = "jws2txt_jzftran"
+version = "0.0.2c"
+authors = [
+  { name="Józef Tran", email="jozeftran@gmail.com" },
+]
+description = "A JASCO file (*.jws and *.jwb) to text file converter."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Chemistry"  
+]
+
+[project.scripts]
+jws2txt = "jws2txt:main"
+
+[project.urls]
+"Homepage" = "https://github.com/jzftran/jws2txt"
+"Bug Tracker" = "https://github.com/jzftran/jws2txt/issues"
