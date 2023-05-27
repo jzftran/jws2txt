@@ -1,5 +1,6 @@
 #%%
-from src import jws2txt
+
+import jws2txt
 
 
-jws2txt.main()
+JWSFile(ole)
