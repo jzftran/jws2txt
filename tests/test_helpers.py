@@ -16,7 +16,7 @@ class JWSFileTest(unittest.TestCase):
         self.assertEqual(self.three_channels.x_for_last_point, 200.0)
         self.assertEqual(self.three_channels.x_increment, -0.1)
         self.assertEqual(self.three_channels.header_codes, (268435715, 4097, 8193, 3))
-        self.assertEqual(self.three_channels.header_names, ['WAVELENGTH', 'CD', 'HT VOLTAGE', 'ABSORBANCE'])
+        self.assertEqual(self.three_channels.header_names, ['WAVELENGTH', 'CD', 'HT VOLTAGE', 'ABSORBANCE'])  # noqa: E501
         self.assertEqual(self.three_channels.data_list, [3,
                                                         1,
                                                         0,
