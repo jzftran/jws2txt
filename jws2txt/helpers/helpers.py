@@ -60,9 +60,12 @@ class JWSFile:
         self.x_for_last_point = data_tuple[7]
         self.x_increment = data_tuple[8]
 
-        self.header_codes = tuple([x for i, x in enumerate(data_tuple[9:13]) if x not in data_tuple[9:13][:i]])
+        self.header_codes = tuple([x for i, x
+                                    in enumerate(data_tuple[9:13])
+                                    if x not in data_tuple[9:13][:i]])
 
-        self.header_names = [CHANNELS_DEFINITIONS.get(k, "undefined") for k in self.header_codes]
+        self.header_names = [CHANNELS_DEFINITIONS.get(k, "undefined") for k
+                              in self.header_codes]
 
         self.data_list = list(data_tuple)
 
@@ -85,7 +88,7 @@ class JWSFile:
             except Exception as e:
                 print(f"Incorrect number of channels. {e}")
 
-        sample_info = file.openstream('SampleInfo').read()[8:].split(b'\x00\x00\x08\x00')
+        sample_info = file.openstream('SampleInfo').read()[8:].split(b'\x00\x00\x08\x00')  # noqa: E501
 
         try:
             self.__decode_sample_info(sample_info)
@@ -97,7 +100,8 @@ class JWSFile:
         """Unpacks the Y-Data from the JWS file.
         """
         chunk_size = int(len(y_data)/num_chanels)
-        data_chunked = [y_data[i:i + chunk_size] for i in range(0, len(y_data), chunk_size)]
+        data_chunked = [y_data[i:i + chunk_size] for i
+                         in range(0, len(y_data), chunk_size)]
         unpacked_data = [unpack(format, data_chunk) for data_chunk in data_chunked]
         # generate x_data
         x_data = frange(self.x_for_first_point,
