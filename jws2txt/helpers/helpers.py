@@ -38,12 +38,14 @@ def frange(start: float, stop: float = 0, step: float = 1.0):
 class JWSFile:
     """Representation of the JASCO JWS or JWB file."""
 
-    def __init__(self, file: ofio.olefile.OleFileIO) -> None:
+    def __init__(self, path: str) -> None:
         """Initializes the JWSFile class.
 
         Args:
-           file (olefile.olefile.OleFileIO): JWS or JWB file read by OleFileIO
+           path (str): PAtj tp JWS or JWB file
         """
+        file = ofio.olefile.OleFileIO(path)
+
         data_info = file.openstream('DataInfo').read()
 
         if (len(data_info)) < 96:

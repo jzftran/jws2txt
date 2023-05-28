@@ -1,5 +1,6 @@
 import argparse
 import os
+from .helpers.helpers import JWSFile
 
 
 def str2bool(v) -> bool:
@@ -40,9 +41,9 @@ def main():
         for file in gen:
 
             out_file_path = os.path.join(args.out_dir, ''.join((os.path.splitext(file)[0], '.txt')))
-            jws_file_path = ofio.OleFileIO(os.path.join(root, file))
+            jws_file_path = os.path.join(root, file)
 
-            JWSFile(file=jws_file_path).write_data(out_file=out_file_path,
+            JWSFile(path=jws_file_path).write_data(out_file=out_file_path,
                                                    delimiter=args.delimiter,
                                                    write_comments=args.comments,
                                                    write_header=args.header)
@@ -50,6 +51,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-    
-    
-    

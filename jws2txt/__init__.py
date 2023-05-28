@@ -1,1 +1,1 @@
-from .helpers.helpers import (JWSFile)
+from .helpers.helpers import JWSFile
