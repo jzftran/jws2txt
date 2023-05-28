@@ -75,25 +75,25 @@ class JWSFile:
         fmt = 'f'*self.npoints
 
         try:
-            self.unpack_y_data(y_data, format=fmt, num_chanels=self.numchanels)
+            self.__unpack_y_data(y_data, format=fmt, num_chanels=self.numchanels)
 
-        except:
+        except Exception:
             try:
                 # works in the case of *.jwb file
                 self.numchanels = data_tuple[1]
-                self.unpack_y_data(y_data, format=fmt, num_chanels=self.numchanels)
-            except:
-                print("Incorrect number of channels.")
+                self.__unpack_y_data(y_data, format=fmt, num_chanels=self.numchanels)
+            except Exception as e:
+                print(f"Incorrect number of channels. {e}")
 
         sample_info = file.openstream('SampleInfo').read()[8:].split(b'\x00\x00\x08\x00')
 
         try:
-            self.decode_sample_info(sample_info)
-        except:
+            self.__decode_sample_info(sample_info)
+        except Exception:
             self.sample_name = ''
             self.comment = ''
 
-    def unpack_y_data(self, y_data: bytes, format: str, num_chanels: int) -> None:
+    def __unpack_y_data(self, y_data: bytes, format: str, num_chanels: int) -> None:
         """Unpacks the Y-Data from the JWS file.
         """
         chunk_size = int(len(y_data)/num_chanels)
@@ -107,22 +107,22 @@ class JWSFile:
         unpacked_data.insert(0, tuple(x_data))
         self.unpacked_data = unpacked_data
 
-    def decode_sample_info(self, sample_info_bytes: list) -> None:
+    def __decode_sample_info(self, sample_info_bytes: list) -> None:
         """Decodes the SampleInfo"""
         if len(sample_info_bytes) == 2:
             sample_name = sample_info_bytes[0].split(b'\x00\x00')[0]
-            self.sample_name = (self.unpack_sample_info(sample_name))
+            self.sample_name = (self.__unpack_sample_info(sample_name))
 
             comment = sample_info_bytes[1].split(b'\x00\x00')[1]
-            self.comment = self.unpack_sample_info(comment)
+            self.comment = self.__unpack_sample_info(comment)
 
         elif len(sample_info_bytes) == 1:
             sample_name = sample_info_bytes[0].split(b'\x00\x00')[0]
-            self.sample_name = self.unpack_sample_info(sample_name)
+            self.sample_name = self.__unpack_sample_info(sample_name)
 
             self.comment = ''
 
-    def unpack_sample_info(self, packed_bytes: bytes) -> str:
+    def __unpack_sample_info(self, packed_bytes: bytes) -> str:
         """Unpacks SampleInfo bytes"""
         if packed_bytes[-1:] not in {b'\x00', b''}:
             packed_bytes += b'\x00'
@@ -140,11 +140,11 @@ class JWSFile:
             with open(out_file, 'x', newline='') as f:
                 writer = csv.writer(f, delimiter=delimiter)
 
-                if write_comments == True:
+                if write_comments is True:
                     writer.writerow([self.sample_name])
                     writer.writerow([self.comment])
 
-                if write_header == True:
+                if write_header is True:
                     if len(self.header_names) == len(self.unpacked_data):
                         writer.writerow(self.header_names)
                     elif len(self.header_names) < len(self.unpacked_data):
