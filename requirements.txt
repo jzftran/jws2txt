@@ -1,2 +1,1 @@
-numpy
-olefile-0.46
+olefile~=0.46
