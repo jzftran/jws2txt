@@ -1,7 +1,7 @@
 from struct import unpack
 import csv
 import olefile as ofio
-
+from typing import Iterator
 
 DATAINFO_FMT = '<LLLLLLdddLLLLdddd'
 
@@ -16,7 +16,7 @@ CHANNELS_DEFINITIONS = {
 
 
 
-def frange(start: float, stop: float = 0, step: float = 1.0):
+def frange(start: float, stop: float = 0, step: float = 1.0) -> Iterator[float]:
     """Return evenly spaced number over specified range.
 
     Args:
@@ -95,6 +95,8 @@ class JWSFile:
         except Exception:
             self.sample_name = ''
             self.comment = ''
+
+        file.close()
 
     def __unpack_y_data(self, y_data: bytes, format: str, num_chanels: int) -> None:
         """Unpacks the Y-Data from the JWS file.

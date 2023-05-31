@@ -3,7 +3,7 @@ import os
 from .helpers.helpers import JWSFile
 
 
-def str2bool(v) -> bool:
+def str2bool(v: str) -> bool:
     """Converts string to bool."""
     if isinstance(v, bool):
         return v
