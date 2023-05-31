@@ -38,8 +38,6 @@ test_file = jws2txt.JWSFile(r'../tests/files/2022_05_14-1.jwb')
 # %%
 
 
-from jws2txt.helpers.helpers import frange
 
 
-tuple(frange(2, 0.9, -0.1))
 # %%
