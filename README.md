@@ -13,6 +13,6 @@ Data unpacking is based on Víctor M. Hernández-Rocamora's jwsProcessor (https:
 ## Installation and Usage
 ------------
 1. Download Python.
-2. Run the 'pip install jws2txt' command in the command line.
-3. To convert the files, run the 'jws2txt --in-path path_to_folder --out-dir output_folder_path' command, where path_to_folder is the folder containing the JWS or JWB files.
+2. Run the `pip install jws2txt` command in the command line.
+3. To convert the files, run the `jws2txt --in-path path_to_folder --out-dir output_folder_path` command, where path_to_folder is the folder containing the JWS or JWB files.
 4. The converted files will be located in the folder containing the source JWS or JWB files.
