@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "jws2txt"
-version = "0.0.7a"
+version = "1.0.0"
 authors = [
   { name="Józef Tran", email="jozeftran@gmail.com" },
 ]
