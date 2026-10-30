@@ -13,7 +13,7 @@ description = "A JASCO file (*.jws and *.jwb) to text file converter."
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
-    "olefile",
+    "olefile~=0.47",
 ]
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -32,3 +32,10 @@ jws2txt = "jws2txt.jws2txt:main"
 
 [tool.hatch.version]
 path = "jws2txt/__init__.py"
+
+[tool.ruff]
+line-length = 88
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["ALL"]
