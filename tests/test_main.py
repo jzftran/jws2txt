@@ -1,29 +1,31 @@
 """Tests for jws2txt main module."""
 
-import pytest
 from argparse import ArgumentTypeError
-from jws2txt.jws2txt import str2bool, parse_metadata_mode
+
+import pytest
+
+from jws2txt.jws2txt import parse_metadata_mode, str2bool
 
 
 class TestStr2Bool:
     """Tests for str2bool function."""
 
     @pytest.mark.parametrize("value", ["y", "yes", "true", "t", "1", "Y", "YES", "TRUE", "T"])
-    def test_str2bool_true(self, value):
+    def test_str2bool_true(self, value) -> None:
         """Test str2bool returns True for truthy values."""
         assert str2bool(value) is True
 
     @pytest.mark.parametrize("value", ["n", "no", "false", "f", "0", "N", "NO", "FALSE", "F"])
-    def test_str2bool_false(self, value):
+    def test_str2bool_false(self, value) -> None:
         """Test str2bool returns False for falsy values."""
         assert str2bool(value) is False
 
-    def test_str2bool_bool_passthrough(self):
+    def test_str2bool_bool_passthrough(self) -> None:
         """Test str2bool passes through bool values."""
         assert str2bool(True) is True
         assert str2bool(False) is False
 
-    def test_str2bool_invalid(self):
+    def test_str2bool_invalid(self) -> None:
         """Test str2bool raises ArgumentTypeError for invalid values."""
         with pytest.raises(ArgumentTypeError):
             str2bool("blurb")
@@ -37,7 +39,7 @@ class TestParseMetadataMode:
     """Tests for parse_metadata_mode function."""
 
     @pytest.mark.parametrize(
-        "value,expected",
+        ("value", "expected"),
         [
             ("none", "none"),
             ("NONE", "none"),
@@ -49,12 +51,12 @@ class TestParseMetadataMode:
             ("f", "none"),
         ],
     )
-    def test_parse_metadata_mode_none(self, value, expected):
+    def test_parse_metadata_mode_none(self, value, expected) -> None:
         """Test parse_metadata_mode returns 'none' for none values."""
         assert parse_metadata_mode(value) == expected
 
     @pytest.mark.parametrize(
-        "value,expected",
+        ("value", "expected"),
         [
             ("header", "header"),
             ("HEADER", "header"),
@@ -62,12 +64,12 @@ class TestParseMetadataMode:
             ("head", "header"),
         ],
     )
-    def test_parse_metadata_mode_header(self, value, expected):
+    def test_parse_metadata_mode_header(self, value, expected) -> None:
         """Test parse_metadata_mode returns 'header' for header values."""
         assert parse_metadata_mode(value) == expected
 
     @pytest.mark.parametrize(
-        "value,expected",
+        ("value", "expected"),
         [
             ("json", "json"),
             ("JSON", "json"),
@@ -75,12 +77,12 @@ class TestParseMetadataMode:
             ("sidecar", "json"),
         ],
     )
-    def test_parse_metadata_mode_json(self, value, expected):
+    def test_parse_metadata_mode_json(self, value, expected) -> None:
         """Test parse_metadata_mode returns 'json' for json values."""
         assert parse_metadata_mode(value) == expected
 
     @pytest.mark.parametrize(
-        "value,expected",
+        ("value", "expected"),
         [
             ("both", "both"),
             ("BOTH", "both"),
@@ -93,11 +95,11 @@ class TestParseMetadataMode:
             ("t", "both"),
         ],
     )
-    def test_parse_metadata_mode_both(self, value, expected):
+    def test_parse_metadata_mode_both(self, value, expected) -> None:
         """Test parse_metadata_mode returns 'both' for both values."""
         assert parse_metadata_mode(value) == expected
 
-    def test_parse_metadata_mode_invalid(self):
+    def test_parse_metadata_mode_invalid(self) -> None:
         """Test parse_metadata_mode raises ArgumentTypeError for invalid values."""
         with pytest.raises(ArgumentTypeError):
             parse_metadata_mode("invalid_mode")

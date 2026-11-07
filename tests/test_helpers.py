@@ -10,7 +10,7 @@ from jws2txt.helpers.helpers import frange
 class TestJWSFile:
     """Tests for JWSFile class."""
 
-    def test_three_channels_creation(self, hg_file):
+    def test_three_channels_creation(self, hg_file) -> None:
         """Test 3-channel JWS file creation and initialization."""
         assert hg_file.numchanels == 3
         assert hg_file.npoints == 1201
@@ -50,10 +50,10 @@ class TestJWSFile:
         assert hg_file.unpacked_data[1][2] == pytest.approx(0.1975005567073822)
         assert hg_file.unpacked_data[2][2] == pytest.approx(206.2129669189453)
         assert hg_file.unpacked_data[3][2] == pytest.approx(
-            0.11851496249437332
+            0.11851496249437332,
         )
 
-    def test_single_channel(self, fl_file):
+    def test_single_channel(self, fl_file) -> None:
         """Test single channel JWS file creation and initialization."""
         assert fl_file.numchanels == 1
         assert fl_file.npoints == 301
@@ -87,7 +87,7 @@ class TestJWSFile:
         assert fl_file.unpacked_data[0][2] == 402.0
         assert fl_file.unpacked_data[1][2] == pytest.approx(24.556852340698242)
 
-    def test_jwb_file_creation(self, jwb_file):
+    def test_jwb_file_creation(self, jwb_file) -> None:
         """Test multi-scan JWB file creation and initialization."""
         assert jwb_file.numchanels == 8
         assert jwb_file.npoints == 1001
@@ -122,10 +122,10 @@ class TestJWSFile:
         # test x-axis and 7th channel
         assert jwb_file.unpacked_data[0][2] == 899.0
         assert jwb_file.unpacked_data[7][2] == pytest.approx(
-            0.07367147505283356
+            0.07367147505283356,
         )
 
-    def test_writing(self, hg_file, tmp_path):
+    def test_writing(self, hg_file, tmp_path) -> None:
         """Test writing data to a text file."""
         test_file = tmp_path / "test_output.txt"
         hg_file.write_data(test_file)
@@ -148,7 +148,7 @@ class TestFrange:
     """Tests for frange function."""
 
     @pytest.mark.parametrize(
-        "start,stop,step,expected",
+        ("start", "stop", "step", "expected"),
         [
             (1, 2, 0.2, (1.0, 1.2, 1.4, 1.6, 1.8)),
             (
@@ -171,15 +171,15 @@ class TestFrange:
             ),
         ],
     )
-    def test_frange(self, start, stop, step, expected):
+    def test_frange(self, start, stop, step, expected) -> None:
         """Test frange with various parameters."""
         assert tuple(frange(start, stop, step)) == expected
 
-    def test_frange_empty(self):
+    def test_frange_empty(self) -> None:
         """Test frange with empty range."""
         assert tuple(frange(1, 1, 0.1)) == ()
         assert tuple(frange(1, 0, 0.1)) == ()
 
-    def test_frange_single_step(self):
+    def test_frange_single_step(self) -> None:
         """Test frange with single step."""
         assert tuple(frange(0, 1, 1)) == (0.0,)
