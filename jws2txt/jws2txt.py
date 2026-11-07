@@ -1,96 +1,199 @@
+from __future__ import annotations
+
 import argparse
-import os
+import csv
+import sys
+from collections.abc import Iterator
+from enum import Enum
+from itertools import chain
+from pathlib import Path
+
 from .helpers.helpers import JWSFile
 
-
-def str2bool(v: str) -> bool:
-    """Converts string to bool."""
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
+_TRUE_VALUES = frozenset({"yes", "true", "t", "y", "1"})
+_FALSE_VALUES = frozenset({"no", "false", "f", "n", "0"})
 
 
-def parse_metadata_mode(v: str) -> str:
-    """Parses and normalizes metadata output mode (case-insensitive)."""
-    s = str(v).strip().lower()
-    if s in ('none', 'false', 'f', 'no', '0'):
-        return 'none'
-    elif s in ('header', 'head'):
-        return 'header'
-    elif s in ('json', 'sidecar'):
-        return 'json'
-    elif s in ('both', 'all', 'true', 't', 'yes', '1'):
-        return 'both'
-    else:
-        raise argparse.ArgumentTypeError(
-            f"Invalid metadata mode: {v!r}. Choose from 'none', 'header', 'json', or 'both'."
-        )
+class MetadataMode(str, Enum):
+    NONE = "none"
+    HEADER = "header"
+    JSON = "json"
+    BOTH = "both"
 
-def main():
-    
-    parser = argparse.ArgumentParser(description='Converts *.jws or *jwb files to human\
-                                     -readable text files.')
-    parser.add_argument('--in-path', type=str, required=True,
-                        help="Path to file or folder containing files for conversion.")
-    parser.add_argument('--out-dir', type=str,  help='Output folder')
-    parser.add_argument('--delimiter', type=str, default='\t', help='Delimiter used in\
-                         saved text files.')
-    parser.add_argument('--comments', type=str2bool, choices=[True, False], default=True,  # noqa: E501
-                         help='Write sample information.')
-    parser.add_argument('--header', type=str2bool, choices=[True, False], default=True,
-                         help='Write column headers.')
-    parser.add_argument('--metadata', type=parse_metadata_mode, default='none', metavar='MODE',
-                         help="Metadata export: 'none' (default), 'header' (top comment lines in text file), 'json' (sidecar file), or 'both'.")
+    def __str__(self) -> str:
+        return self.value
 
-    args = parser.parse_args()
+    @property
+    def writes_header(self) -> bool:
+        return self in (MetadataMode.HEADER, MetadataMode.BOTH)
 
-    if not os.path.exists(args.in_path):
-        raise FileNotFoundError(f"{args.in_path} does not exist.")
+    @property
+    def writes_json(self) -> bool:
+        return self in (MetadataMode.JSON, MetadataMode.BOTH)
 
-    if os.path.isfile(args.in_path):
-        out_dir = args.out_dir if args.out_dir else os.path.dirname(args.in_path)
-        if not out_dir:
-            out_dir = "."
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir, exist_ok=True)
-        out_file_path = os.path.join(
-            out_dir, os.path.splitext(os.path.basename(args.in_path))[0] + ".txt"
-        )
-        JWSFile(path=args.in_path).write_data(
-            out_file=out_file_path,
-            delimiter=args.delimiter,
-            write_comments=args.comments,
-            write_header=args.header,
-            metadata=args.metadata,
-        )
+
+_METADATA_ALIASES: dict[str, MetadataMode] = {
+    "none": MetadataMode.NONE,
+    "false": MetadataMode.NONE,
+    "f": MetadataMode.NONE,
+    "no": MetadataMode.NONE,
+    "0": MetadataMode.NONE,
+    "header": MetadataMode.HEADER,
+    "head": MetadataMode.HEADER,
+    "json": MetadataMode.JSON,
+    "sidecar": MetadataMode.JSON,
+    "both": MetadataMode.BOTH,
+    "all": MetadataMode.BOTH,
+    "true": MetadataMode.BOTH,
+    "t": MetadataMode.BOTH,
+    "yes": MetadataMode.BOTH,
+    "1": MetadataMode.BOTH,
+}
+
+SUPPORTED_EXTENSIONS = frozenset({".jws", ".jwb"})
+
+
+def iter_input_files(in_path: Path) -> Iterator[Path]:
+    if in_path.is_file():
+        yield in_path
         return
+    for path in sorted(in_path.rglob("*")):
+        if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS:
+            yield path
 
-    if args.out_dir is None:
-        args.out_dir = args.in_path
 
-    if not os.path.exists(args.out_dir):
-        os.makedirs(args.out_dir, exist_ok=True)
+def str2bool(value: str | bool) -> bool:
+    """Convert a string representation of a boolean into a bool."""
+    if isinstance(value, bool):
+        return value
 
-    for (root, dirs, files) in os.walk(args.in_path, topdown=True):
-        gen = (file for file in files if file.endswith(('.jwb', '.jws')))
+    normalized = value.strip().lower()
 
-        for file in gen:
+    if normalized in _TRUE_VALUES:
+        return True
 
-            out_file_path = os.path.join(args.out_dir, ''.join((os.path.splitext(file)[0],  # noqa: E501
-                                                                 '.txt')))
-            jws_file_path = os.path.join(root, file)
+    if normalized in _FALSE_VALUES:
+        return False
 
-            JWSFile(path=jws_file_path).write_data(out_file=out_file_path,
-                                                   delimiter=args.delimiter,
-                                                   write_comments=args.comments,
-                                                   write_header=args.header,
-                                                   metadata=args.metadata)
-      
+    raise argparse.ArgumentTypeError(
+        f"Boolean value expected, got {value!r}.",
+    )
 
-if __name__ == '__main__':
+
+def parse_metadata_mode(value: str) -> MetadataMode:
+    """Parse metadata output mode, accepting case-insensitive aliases."""
+    normalized = value.strip().lower()
+
+    try:
+        return _METADATA_ALIASES[normalized]
+    except KeyError:
+        choices = ", ".join(mode.value for mode in MetadataMode)
+        raise argparse.ArgumentTypeError(
+            f"Invalid metadata mode: {value!r}. Choose from: {choices}.",
+        ) from None
+
+
+def create_argument_parser() -> argparse.ArgumentParser:
+    """Create and configure the command-line argument parser."""
+    parser = argparse.ArgumentParser(
+        description="Convert .jws and .jwb files into\
+                    human-readable text files.",
+    )
+
+    parser.add_argument(
+        "--in-path",
+        type=Path,
+        required=True,
+        metavar="PATH",
+        help="Path to a file or directory containing files to convert.",
+    )
+
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        metavar="DIR",
+        help="Output directory. Defaults to the input file's parent "
+        "or the input directory.",
+    )
+
+    parser.add_argument(
+        "--delimiter",
+        default="\t",
+        help="Delimiter used in generated text files.",
+    )
+
+    parser.add_argument(
+        "--comments",
+        type=str2bool,
+        choices=(True, False),
+        default=True,
+        metavar="BOOL",
+        help="Write sample information (default: true).",
+    )
+
+    parser.add_argument(
+        "--header",
+        type=str2bool,
+        choices=(True, False),
+        default=True,
+        metavar="BOOL",
+        help="Write column headers (default: true).",
+    )
+
+    parser.add_argument(
+        "--metadata",
+        type=parse_metadata_mode,
+        choices=list(MetadataMode),
+        default=MetadataMode.NONE,
+        metavar="MODE",
+        help="Metadata export mode: none, header, json, or both.",
+    )
+
+    return parser
+
+
+def convert_file(src: Path, out_dir: Path, args: argparse.Namespace) -> None:
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_txt = out_dir / f"{src.stem}.txt"
+    jws = JWSFile(src)
+
+    with out_txt.open("x", newline="", encoding="utf-8") as f:
+        if args.metadata.writes_header:
+            f.writelines(f"{line}\n" for line in jws.iter_metadata_rows())
+
+        rows = chain(
+            jws.iter_comment_rows() if args.comments else (),
+            jws.iter_header_rows() if args.header else (),
+            jws.iter_data_rows(),
+        )
+        csv.writer(f, delimiter=args.delimiter).writerows(rows)
+
+    if args.metadata.writes_json:
+        jws.write_metadata_json(out_txt.with_suffix(".json"))
+
+
+def main() -> int:
+    parser = create_argument_parser()
+    args = parser.parse_args()
+    in_path: Path = args.in_path
+
+    if not in_path.exists():
+        parser.error(f"{in_path} does not exist.")
+
+    base_out = args.out_dir or (
+        in_path.parent if in_path.is_file() else in_path
+    )
+
+    failures = 0
+    for src in iter_input_files(in_path):
+        rel = Path() if in_path.is_file() else src.parent.relative_to(in_path)
+        try:
+            convert_file(src, base_out / rel, args)
+        except Exception as exc:  # keep going, report at the end
+            failures += 1
+            print(f"Failed: {src}: {exc}", file=sys.stderr)
+    return 1 if failures else 0
+
+
+if __name__ == "__main__":
     main()

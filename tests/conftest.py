@@ -6,7 +6,7 @@ import jws2txt
 
 
 @pytest.fixture(scope="session")
-def sample_files_dir():
+def sample_files_dir() -> str:
     """Path to the test files directory."""
     return "tests/files"
 

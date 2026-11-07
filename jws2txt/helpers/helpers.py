@@ -21,7 +21,7 @@ import olefile as ofio
 from .metadata import extract_metadata, format_metadata_header
 
 if TYPE_CHECKING:
-    import os
+    from os import PathLike
 
 DATAINFO_FMT = "<LLLLLLdddLLLLdddd"
 
@@ -40,7 +40,7 @@ MetadataMode = Optional[Literal["header", "json", "both"]]
 
 @contextmanager
 def _open_text(
-    target: str | os.PathLike[str] | TextIO,
+    target: str | PathLike[str] | TextIO,
 ) -> Generator[TextIO, None, None]:
     """Yield a writable text stream, opening paths exclusively."""
     if isinstance(
@@ -175,18 +175,18 @@ def _multi_scan_header_names(
 class JWSFile:
     """Representation of the JASCO JWS or JWB file."""
 
-    def __init__(self, path: str) -> None:
+    def __init__(self, path: str | PathLike[str]) -> None:
         """Initialize the JWSFile class.
 
         Args:
            path (str): Path to the JWS or JWB file
 
         """
-        with ofio.OleFileIO(path) as file:
-            data_tuple = self._read_data_info(file, path)
+        with ofio.OleFileIO(str(path)) as file:
+            data_tuple = self._read_data_info(file, str(path))
             scan_count, signal_count = data_tuple[1], data_tuple[3]
 
-            y_data = self._read_y_data(file, path)
+            y_data = self._read_y_data(file, str(path))
             self.numchanels = self._count_spectra(
                 len(y_data),
                 scan_count,
@@ -312,7 +312,7 @@ class JWSFile:
 
     def write_data(
         self,
-        out_file: str | os.PathLike | TextIO,
+        out_file: str | PathLike[str] | TextIO,
         *,
         delimiter: str = "\t",
     ) -> None:
@@ -328,39 +328,39 @@ class JWSFile:
         """
         with _open_text(out_file) as f:
             csv.writer(f, delimiter=delimiter).writerows(
-                self._iter_data_rows(),
+                self.iter_data_rows(),
             )
 
-    def _iter_comment_rows(self) -> Iterator[Sequence[Any]]:
+    def iter_comment_rows(self) -> Iterator[Sequence[Any]]:
         """Yield sample name and comment rows."""
         yield [self.sample_name]
         yield [self.comment]
 
-    def _iter_header_rows(self) -> Iterator[Sequence[str]]:
+    def iter_header_rows(self) -> Iterator[Sequence[str]]:
         """Yield column header row."""
         yield self._padded_header_names()
 
-    def _iter_data_rows(self) -> Iterator[Sequence[Any]]:
+    def iter_data_rows(self) -> Iterator[Sequence[Any]]:
         """Yield spectral data rows."""
         yield from zip(*self.unpacked_data, strict=True)
 
     def write_metadata(
         self,
-        out_file: str | os.PathLike | TextIO,
+        out_file: str | PathLike[str] | TextIO,
     ) -> None:
         """Write metadata as comment lines to a text file."""
         with _open_text(out_file) as f:
             csv.writer(f, delimiter="\t").writerows(
-                self._iter_metadata_rows(),
+                ([line] for line in self.iter_metadata_rows()),
             )
 
-    def _iter_metadata_rows(self) -> Iterator[list[str]]:
+    def iter_metadata_rows(self) -> Iterator[str]:
         """Yield metadata as comment rows."""
-        yield from ([line] for line in format_metadata_header(self.metadata))
+        yield from format_metadata_header(self.metadata)
 
     def write_metadata_json(
         self,
-        out_file: str | os.PathLike,
+        out_file: str | PathLike[str],
         indent: int = 2,
     ) -> None:
         """Write metadata as a JSON file."""
