@@ -1,12 +1,27 @@
+from __future__ import annotations
+
 import csv
 import json
-import os
+from contextlib import contextmanager
+from pathlib import Path
 from struct import unpack
-from typing import Any, Iterator, Optional, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Generator,
+    Iterator,
+    Literal,
+    Optional,
+    Sequence,
+    TextIO,
+)
 
 import olefile as ofio
 
 from .metadata import extract_metadata, format_metadata_header
+
+if TYPE_CHECKING:
+    import os
 
 DATAINFO_FMT = "<LLLLLLdddLLLLdddd"
 
@@ -19,9 +34,94 @@ CHANNELS_DEFINITIONS = {
     14: "FLUORESCENCE",
 }
 
+MINIMUM_DATA_SIZE = 96
+MetadataMode = Optional[Literal["header", "json", "both"]]
+
+
+@contextmanager
+def _open_text(
+    target: str | os.PathLike[str] | TextIO,
+) -> Generator[TextIO, None, None]:
+    """Yield a writable text stream, opening paths exclusively."""
+    if isinstance(
+        target,
+        TextIO,
+    ):
+        yield target
+        return
+
+    with Path(target).open(mode="x", newline="", encoding="utf-8") as stream:
+        yield stream
+
+
+class InvalidJascoDataError(Exception):
+    """Raised when a JASCO file contains invalid or incomplete data."""
+
+    def __init__(
+        self,
+        stream_name: str,
+        actual_size: int,
+        minimum_size: int,
+    ) -> None:
+        """Initialize the exception with stream size details."""
+        super().__init__(
+            f"{stream_name} must be at least {minimum_size} bytes, "
+            f"but contains only {actual_size} bytes.",
+        )
+
+
+class InvalidXIncrementError(ValueError):
+    """Raised when x_increment cannot be computed from the DataInfo header."""
+
+    def __init__(self) -> None:
+        """Initialize the exception with a fixed message."""
+        super().__init__(
+            "Cannot compute x_increment: identical first/last points.",
+        )
+
+
+class InvalidNPointsError(ValueError):
+    """Raised when DataInfo declares an unusable number of points."""
+
+    def __init__(self, npoints: object) -> None:
+        """Initialize the exception with the offending value."""
+        super().__init__(
+            f"Invalid npoints: {npoints!r} (expected an integer >= 2).",
+        )
+
+
+class InvalidYDataLengthError(ValueError):
+    """Raised when Y-Data size is not a whole number of float32 spectra."""
+
+    def __init__(self, data_size: int, npoints: int) -> None:
+        """Initialize the exception with the stream and spectrum sizes."""
+        super().__init__(
+            f"Invalid Y-Data length for float32 spectra: {data_size} bytes "
+            f"is not a multiple of {npoints * 4} bytes "
+            f"({npoints} points x 4 bytes).",
+        )
+
+
+class InvalidSpectraCountError(ValueError):
+    """Raised when stored spectra do not match the DataInfo declaration."""
+
+    def __init__(
+        self,
+        stored_spectra: int,
+        scan_count: int,
+        signal_count: int,
+    ) -> None:
+        """Initialize the exception with the declared and stored counts."""
+        super().__init__(
+            f"Y-Data contains {stored_spectra} spectra, but DataInfo "
+            f"declares {scan_count} scans and {signal_count} signals",
+        )
+
 
 def frange(
-    start: float, stop: float = 0, step: float = 1.0
+    start: float,
+    stop: float = 0,
+    step: float = 1.0,
 ) -> Iterator[float]:
     """Return evenly spaced number over specified range.
 
@@ -29,122 +129,167 @@ def frange(
         start (float): The starting value of the sequence.
         stop (float): The last value of the sequence.
         step (float): The step for which the sequence is generated.
-    """
 
+    """
     count = 0
     while True:
-        range = start + count * step
-        if step > 0 and range >= stop:
+        float_range = start + count * step
+        if (step > 0 and float_range >= stop) or (
+            step < 0 and float_range <= stop
+        ):
             break
-        elif step < 0 and range <= stop:
-            break
-        yield range
+        yield float_range
         count += 1
+
+
+class MissingYDataError(Exception):
+    """Raised when a JASCO file has no Y-Data stream."""
+
+    def __init__(self, path: str) -> None:
+        """Initialize the exception with the file path."""
+        super().__init__(f"Y-Data stream not found in {path}.")
+
+
+def _unique_codes(codes: Sequence[int]) -> tuple[int, ...]:
+    """Return codes in order, dropping repeats."""
+    return tuple(dict.fromkeys(codes))
+
+
+def _multi_scan_header_names(
+    codes: Sequence[int],
+    scan_count: int,
+    signal_count: int,
+) -> list[str]:
+    """Build neutral column labels for multi-scan JWB files.
+
+    DataInfo does not establish whether the independent variable is
+    temperature, concentration, or something else, so labels stay neutral.
+    """
+    names = ["WAVELENGTH"]
+    for i in range(signal_count):
+        signal = CHANNELS_DEFINITIONS.get(int(codes[i]), f"Signal_{i + 1}")
+        names.extend(f"{signal}_scan{scan + 1}" for scan in range(scan_count))
+    return names
 
 
 class JWSFile:
     """Representation of the JASCO JWS or JWB file."""
 
     def __init__(self, path: str) -> None:
-        """Initializes the JWSFile class.
+        """Initialize the JWSFile class.
 
         Args:
-           path (str): PAtj tp JWS or JWB file
+           path (str): Path to the JWS or JWB file
+
         """
-        file = ofio.olefile.OleFileIO(path)
+        with ofio.OleFileIO(path) as file:
+            data_tuple = self._read_data_info(file, path)
+            scan_count, signal_count = data_tuple[1], data_tuple[3]
 
-        data_info = file.openstream("DataInfo").read()
+            y_data = self._read_y_data(file, path)
+            self.numchanels = self._count_spectra(
+                len(y_data),
+                scan_count,
+                signal_count,
+            )
+            self.__unpack_y_data(
+                y_data,
+                datainfo_fmt="<" + "f" * self.npoints,
+                num_chanels=self.numchanels,
+            )
 
-        if (len(data_info)) < 96:
-            raise Exception("DataInfo should be at least 96 bytes!")
+            # Preserve ordinary JWS header behaviour; only multi-scan JWB
+            # files get per-scan labels.
+            if scan_count > 1 and self.numchanels == scan_count * signal_count:
+                self.header_names = _multi_scan_header_names(
+                    data_tuple[10 : 10 + signal_count],
+                    scan_count,
+                    signal_count,
+                )
 
-        data_info = data_info[:96]
-        data_tuple = unpack(DATAINFO_FMT, data_info)
+            self.metadata = extract_metadata(
+                ole=file,
+                npoints=self.npoints,
+                x_first=self.x_for_first_point,
+                x_last=self.x_for_last_point,
+                x_increment=self.x_increment,
+                header_names=self.header_names,
+                scan_count=scan_count,
+            )
+
+        sample_meta = self.metadata.get("sample", {})
+        self.sample_name = sample_meta.get("name", "")
+        self.comment = sample_meta.get("comment", "")
+
+    def _read_data_info(
+        self,
+        file: ofio.OleFileIO,
+        path: str,
+    ) -> tuple[Any, ...]:
+        """Parse the DataInfo stream and set the axis attributes."""
+        raw = file.openstream("DataInfo").read()
+        if len(raw) < MINIMUM_DATA_SIZE:
+            raise InvalidJascoDataError(
+                stream_name=path,
+                actual_size=len(raw),
+                minimum_size=MINIMUM_DATA_SIZE,
+            )
+
+        data_tuple = unpack(DATAINFO_FMT, raw[:MINIMUM_DATA_SIZE])
         self.numchanels = data_tuple[3]
         self.npoints = data_tuple[5]
         self.x_for_first_point = data_tuple[6]
         self.x_for_last_point = data_tuple[7]
         self.x_increment = data_tuple[8]
 
-        if not isinstance(self.npoints, int) or self.npoints < 2:
-            raise ValueError("Invalid npoints.")
+        if self.npoints < 2:
+            raise InvalidNPointsError(self.npoints)
 
         if self.x_increment in (None, 0):
             span = self.x_for_last_point - self.x_for_first_point
             if span == 0:
-                raise ValueError(
-                    "Cannot compute x_increment: identical first/last points."
-                )
-
+                raise InvalidXIncrementError
             self.x_increment = span / (self.npoints - 1)
 
-        self.header_codes = tuple(
-            [
-                x
-                for i, x in enumerate(data_tuple[9:13])
-                if x not in data_tuple[9:13][:i]
-            ]
-        )
-
+        self.header_codes = _unique_codes(data_tuple[9:13])
         self.header_names = [
             CHANNELS_DEFINITIONS.get(k, "undefined") for k in self.header_codes
         ]
-
         self.data_list = list(data_tuple)
+        return data_tuple
 
+    def _read_y_data(self, file: ofio.OleFileIO, path: str) -> bytes:
+        """Read the Y-Data stream and check it holds whole float32 spectra."""
         if not file.exists("Y-Data"):
-            raise Exception("Y-Data not found!")
+            raise MissingYDataError(path)
 
         y_data = file.openstream("Y-Data").read()
-        # Each JASCO spectrum consists of npoints float32 values. Some JWB
-        # files store scan_count * signal_count spectra (signal-major order).
-        bytes_per_spectrum = self.npoints * 4
-        if not bytes_per_spectrum or len(y_data) % bytes_per_spectrum:
-            raise ValueError("Invalid Y-Data length for float32 spectra")
-        stored_spectra = len(y_data) // bytes_per_spectrum
-        scan_count, signal_count = data_tuple[1], data_tuple[3]
+        if len(y_data) % (self.npoints * 4):
+            raise InvalidYDataLengthError(len(y_data), self.npoints)
+        return y_data
+
+    def _count_spectra(
+        self,
+        y_data_size: int,
+        scan_count: int,
+        signal_count: int,
+    ) -> int:
+        """Return the number of stored spectra, validated against DataInfo.
+
+        Some JWB files store scan_count * signal_count spectra
+        (signal-major order).
+        """
+        stored = y_data_size // (self.npoints * 4)
         allowed = {signal_count, scan_count, scan_count * signal_count}
-        if stored_spectra not in allowed or stored_spectra <= 0:
-            raise ValueError(
-                f"Y-Data contains {stored_spectra} spectra, but DataInfo "
-                f"declares {scan_count} scans and {signal_count} signals"
-            )
-        self.numchanels = stored_spectra
-        self.__unpack_y_data(
-            y_data, format="<" + "f" * self.npoints,
-            num_chanels=stored_spectra
-        )
-        # Preserve ordinary JWS header behaviour. For multi-scan JWB,
-        # use neutral labels: DataInfo does not establish whether the
-        # independent variable is temperature, concentration, or something else.
-        if scan_count > 1 and stored_spectra == scan_count * signal_count:
-            codes = data_tuple[10:10 + signal_count]
-            self.header_names = ["WAVELENGTH"]
-            for i in range(signal_count):
-                signal = CHANNELS_DEFINITIONS.get(
-                    codes[i], f"Signal_{i + 1}"
-                )
-                for scan in range(scan_count):
-                    self.header_names.append(f"{signal}_scan{scan + 1}")
-
-        self.metadata = extract_metadata(
-            ole=file,
-            npoints=self.npoints,
-            x_first=self.x_for_first_point,
-            x_last=self.x_for_last_point,
-            x_increment=self.x_increment,
-            header_names=self.header_names,
-            scan_count=scan_count,
-        )
-
-        sample_meta = self.metadata.get("sample", {})
-        self.sample_name = sample_meta.get("name", "")
-        self.comment = sample_meta.get("comment", "")
-
-        file.close()
+        if stored not in allowed or stored <= 0:
+            raise InvalidSpectraCountError(stored, scan_count, signal_count)
+        return stored
 
     def __unpack_y_data(
-        self, y_data: bytes, format: str, num_chanels: int
+        self,
+        y_data: bytes,
+        datainfo_fmt: str,
+        num_chanels: int,
     ) -> None:
         """Unpacks the Y-Data from the JWS file."""
         chunk_size = int(len(y_data) / num_chanels)
@@ -153,7 +298,7 @@ class JWSFile:
             for i in range(0, len(y_data), chunk_size)
         ]
         unpacked_data = [
-            unpack(format, data_chunk) for data_chunk in data_chunked
+            unpack(datainfo_fmt, data_chunk) for data_chunk in data_chunked
         ]
         # generate x_data
         x_data = frange(
@@ -167,71 +312,62 @@ class JWSFile:
 
     def write_data(
         self,
-        out_file: Union[str, os.PathLike, Any],
-        write_comments: bool = True,
-        write_header: bool = True,
+        out_file: str | os.PathLike | TextIO,
+        *,
         delimiter: str = "\t",
-        metadata: Union[str, bool] = False,
-        json_path: Optional[str] = None,
     ) -> None:
-        """Writes spectral data to a text file and optionally writes metadata.
+        """Write spectral data to a delimited text file.
 
         Args:
             out_file: Target file path or writable stream.
-            write_comments: Write sample name and comment rows (default True).
-            write_header: Write column header row (default True).
             delimiter: Column delimiter (default tab).
-            metadata: Metadata output mode: 'header' (prefixed comment lines at top of file),
-                      'json' (companion sidecar json file), 'both' (both header and json),
-                      or False/'none' (default, no metadata).
-            json_path: Explicit path for the metadata JSON file (if json output requested).
+
+        Raises:
+            FileExistsError: If ``out_file`` is a path that already exists.
+
         """
-        values = list(zip(*self.unpacked_data))
+        with _open_text(out_file) as f:
+            csv.writer(f, delimiter=delimiter).writerows(
+                self._iter_data_rows(),
+            )
 
-        meta_mode = str(metadata).strip().lower()
-        write_meta_header = meta_mode in ("header", "both", "true", "1", "yes", "t")
-        write_meta_json = meta_mode in ("json", "both", "true", "1", "yes", "t")
+    def _iter_comment_rows(self) -> Iterator[Sequence[Any]]:
+        """Yield sample name and comment rows."""
+        yield [self.sample_name]
+        yield [self.comment]
 
-        def _write_content(writer):
-            if write_meta_header:
-                for line in format_metadata_header(self.metadata):
-                    writer.writerow([line])
+    def _iter_header_rows(self) -> Iterator[Sequence[str]]:
+        """Yield column header row."""
+        yield self._padded_header_names()
 
-            if write_comments is True:
-                writer.writerow([self.sample_name])
-                writer.writerow([self.comment])
+    def _iter_data_rows(self) -> Iterator[Sequence[Any]]:
+        """Yield spectral data rows."""
+        yield from zip(*self.unpacked_data, strict=True)
 
-            if write_header is True:
-                if len(self.header_names) == len(self.unpacked_data):
-                    writer.writerow(self.header_names)
-                elif len(self.header_names) < len(self.unpacked_data):
-                    diff = len(self.unpacked_data) - len(self.header_names)
-                    self.header_names.extend(
-                        [self.header_names[-1]] * diff
-                    )
-                    writer.writerow(self.header_names)
+    def write_metadata(
+        self,
+        out_file: str | os.PathLike | TextIO,
+    ) -> None:
+        """Write metadata as comment lines to a text file."""
+        with _open_text(out_file) as f:
+            csv.writer(f, delimiter="\t").writerows(
+                self._iter_metadata_rows(),
+            )
 
-            writer.writerows(values)
+    def _iter_metadata_rows(self) -> Iterator[list[str]]:
+        """Yield metadata as comment rows."""
+        yield from ([line] for line in format_metadata_header(self.metadata))
 
-        if hasattr(out_file, "write"):
-            writer = csv.writer(out_file, delimiter=delimiter)
-            _write_content(writer)
-        else:
-            try:
-                with open(out_file, "x", newline="", encoding="utf-8") as f:
-                    writer = csv.writer(f, delimiter=delimiter)
-                    _write_content(writer)
-            except FileExistsError:
-                print(f"Error: File '{out_file}' already exists.")
-
-        if write_meta_json:
-            target_json = json_path
-            if not target_json and isinstance(out_file, (str, os.PathLike)):
-                target_json = os.path.splitext(out_file)[0] + ".json"
-            if target_json:
-                self.write_metadata_json(target_json)
-
-    def write_metadata_json(self, out_file: str, indent: int = 2) -> None:
-        """Writes metadata as a JSON file."""
-        with open(out_file, "w", encoding="utf-8") as f:
+    def write_metadata_json(
+        self,
+        out_file: str | os.PathLike,
+        indent: int = 2,
+    ) -> None:
+        """Write metadata as a JSON file."""
+        with Path(out_file).open(mode="w", encoding="utf-8") as f:
             json.dump(self.metadata, f, indent=indent, ensure_ascii=False)
+
+    def _padded_header_names(self) -> list[str]:
+        """Header names, repeating the last one to cover all data columns."""
+        missing = len(self.unpacked_data) - len(self.header_names)
+        return [*self.header_names, *[self.header_names[-1]] * max(missing, 0)]
