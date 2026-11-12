@@ -1,6 +1,7 @@
 """Tests for jws2txt helpers module."""
 
 import csv
+from pathlib import Path
 
 import pytest
 
@@ -130,10 +131,11 @@ class TestJWSFile:
         test_file = tmp_path / "test_output.txt"
         hg_file.write_data(test_file)
 
-        with open(test_file, newline="") as f:
+        with Path(test_file).open() as f:
             reader = csv.reader(f, dialect="excel")
             first_row = next(reader)
-            # First row should be the data (tab-delimited in a single cell due to csv reader)
+            # First row should be the data (tab-delimited in a single cell
+            # due to csv reader)
             assert len(first_row) == 1
             # Verify the data contains expected values
             data_parts = first_row[0].split("\t")

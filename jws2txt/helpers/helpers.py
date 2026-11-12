@@ -1,3 +1,32 @@
+"""Read and export spectral data from JASCO JWS and JWB files.
+
+This module provides functionality for parsing JASCO binary data files
+(JWS and JWB), extracting spectral measurements
+and exporting the resulting data to delimited text or JSON (metadata) files.
+
+The parser reads the OLE file structure using olefile and
+extracts the following streams:
+
+DataInfo: Contains information about the spectral data, including
+the number of data points, axis boundaries, axis increment, scan count,
+and signal definitions.
+
+Y-Data: Contains the spectral measurements stored as 32-bit
+floating-point values.
+
+The extracted measurements are converted into a structured representation
+consisting of an independent X-axis and one or more corresponding
+spectral datasets.
+
+For multi-scan JWB files, the module generates individual column names
+for each signal and scan. Signal names are resolved using
+CHANNELS_DEFINITIONS where possible.
+
+Sample information and additional file metadata are extracted through
+the metadata utilities provided by the metadata module.
+
+"""
+
 from __future__ import annotations
 
 import csv
@@ -50,7 +79,7 @@ def _open_text(
         yield target
         return
 
-    with Path(target).open(mode="x", newline="", encoding="utf-8") as stream:
+    with Path(target).open(mode="a", newline="", encoding="utf-8") as stream:
         yield stream
 
 
@@ -352,6 +381,26 @@ class JWSFile:
         with _open_text(out_file) as f:
             csv.writer(f, delimiter="\t").writerows(
                 ([line] for line in self.iter_metadata_rows()),
+            )
+
+    def write_comments(
+        self,
+        out_file: str | PathLike[str] | TextIO,
+    ) -> None:
+        """Write metadata as comment lines to a text file."""
+        with _open_text(out_file) as f:
+            csv.writer(f, delimiter="\t").writerows(
+                (line for line in self.iter_comment_rows()),
+            )
+
+    def write_header(
+        self,
+        out_file: str | PathLike[str] | TextIO,
+    ) -> None:
+        """Write metadata as comment lines to a text file."""
+        with _open_text(out_file) as f:
+            csv.writer(f, delimiter="\t").writerows(
+                (line for line in self.iter_header_rows()),
             )
 
     def iter_metadata_rows(self) -> Iterator[str]:

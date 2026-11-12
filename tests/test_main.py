@@ -10,12 +10,18 @@ from jws2txt.jws2txt import parse_metadata_mode, str2bool
 class TestStr2Bool:
     """Tests for str2bool function."""
 
-    @pytest.mark.parametrize("value", ["y", "yes", "true", "t", "1", "Y", "YES", "TRUE", "T"])
+    @pytest.mark.parametrize(
+        "value",
+        ["y", "yes", "true", "t", "1", "Y", "YES", "TRUE", "T"],
+    )
     def test_str2bool_true(self, value) -> None:
         """Test str2bool returns True for truthy values."""
         assert str2bool(value) is True
 
-    @pytest.mark.parametrize("value", ["n", "no", "false", "f", "0", "N", "NO", "FALSE", "F"])
+    @pytest.mark.parametrize(
+        "value",
+        ["n", "no", "false", "f", "0", "N", "NO", "FALSE", "F"],
+    )
     def test_str2bool_false(self, value) -> None:
         """Test str2bool returns False for falsy values."""
         assert str2bool(value) is False
@@ -100,7 +106,7 @@ class TestParseMetadataMode:
         assert parse_metadata_mode(value) == expected
 
     def test_parse_metadata_mode_invalid(self) -> None:
-        """Test parse_metadata_mode raises ArgumentTypeError for invalid values."""
+        """Test parse_metadata_mode raises ArgumentTypeError for invalid values."""  # noqa: E501
         with pytest.raises(ArgumentTypeError):
             parse_metadata_mode("invalid_mode")
         with pytest.raises(ArgumentTypeError):

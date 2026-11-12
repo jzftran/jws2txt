@@ -13,7 +13,7 @@ def sample_files_dir() -> str:
 
 @pytest.fixture(scope="session")
 def hg_file(sample_files_dir):
-    """JWSFile for 001Hg.jws (3 channels: WAVELENGTH, CD, HT VOLTAGE, ABSORBANCE)."""
+    """JWSFile for 001Hg.jws (3 channels: WAVELENGTH, CD, HT VOLTAGE, ABSORBANCE)."""  # noqa: E501
     return jws2txt.JWSFile(f"{sample_files_dir}/001Hg.jws")
 
 

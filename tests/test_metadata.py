@@ -1,5 +1,6 @@
 """Tests for jws2txt metadata extraction and writing."""
 
+import argparse
 import json
 
 import pytest
@@ -50,7 +51,13 @@ class TestMetadataStructure:
         assert params["pathlength"] == "100 um"
         assert params["scanning_mode"] == "Continuous"
 
-    def test_sample_names_populated_from_metadata(self, hg_file, fl_file, cd_file, jwb_file) -> None:
+    def test_sample_names_populated_from_metadata(
+        self,
+        hg_file,
+        fl_file,
+        cd_file,
+        jwb_file,
+    ) -> None:
         """Test sample_name and comment are populated from metadata."""
         assert hg_file.sample_name == "HK14_CN"
         assert hg_file.comment == "1mm"
@@ -97,8 +104,14 @@ class TestJWBMultiScanMetadata:
         assert temp_ctrl.get("stabilization_time") == 20.0
         assert temp_ctrl.get("post_run_temperature") == 300.0
         assert len(temp_ctrl.get("scan_temperatures", [])) == 8
-        assert temp_ctrl["scan_temperatures"][0] == pytest.approx(24.98, abs=0.1)
-        assert temp_ctrl["scan_temperatures"][-1] == pytest.approx(60.01, abs=0.1)
+        assert temp_ctrl["scan_temperatures"][0] == pytest.approx(
+            24.98,
+            abs=0.1,
+        )
+        assert temp_ctrl["scan_temperatures"][-1] == pytest.approx(
+            60.01,
+            abs=0.1,
+        )
 
 
 class TestParseMetadataMode:
@@ -138,7 +151,7 @@ class TestParseMetadataMode:
 
     def test_parse_metadata_mode_invalid(self) -> None:
         """Test parse_metadata_mode raises for invalid values."""
-        with pytest.raises(ValueError):
+        with pytest.raises(argparse.ArgumentTypeError):
             parse_metadata_mode("invalid_mode")
 
 
@@ -148,7 +161,9 @@ class TestMetadataWriting:
     def test_metadata_default_off(self, hg_file, tmp_path) -> None:
         """Test default metadata=False writes no # comments."""
         test_txt = tmp_path / "test_out.txt"
-        hg_file.write_data(test_txt, write_comments=True, write_header=True)
+        hg_file.write_comments(test_txt)
+        hg_file.write_header(test_txt)
+        hg_file.write_data(test_txt)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0] == "HK14_CN"
@@ -159,7 +174,10 @@ class TestMetadataWriting:
     def test_metadata_header_mode(self, hg_file, tmp_path) -> None:
         """Test metadata='header' writes #-prefixed metadata at top."""
         test_txt = tmp_path / "test_out.txt"
-        hg_file.write_data(test_txt, write_comments=True, write_header=True, metadata="HEADER")
+        hg_file.write_metadata(test_txt)
+        hg_file.write_comments(test_txt)
+        hg_file.write_header(test_txt)
+        hg_file.write_data(test_txt)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0].startswith("# --- Measurement Information ---")
@@ -169,16 +187,22 @@ class TestMetadataWriting:
         assert any("Accumulations: 3" in l for l in header_comments)
 
         # Sample comments appear after metadata header
-        first_non_hash = next(i for i, l in enumerate(lines) if not l.startswith("# "))
+        first_non_hash = next(
+            i for i, l in enumerate(lines) if not l.startswith("# ")
+        )
         assert lines[first_non_hash] == "HK14_CN"
         assert lines[first_non_hash + 1] == "1mm"
         assert lines[first_non_hash + 2].startswith("WAVELENGTH")
 
     def test_metadata_json_mode(self, hg_file, tmp_path) -> None:
-        """Test metadata='json' writes companion json, no # comments in text."""
+        """Test writing of companion json, no # comments in text."""
         test_txt = tmp_path / "test_out.txt"
         test_json = tmp_path / "test_out.json"
-        hg_file.write_data(test_txt, write_comments=True, write_header=True, metadata="Json")
+
+        hg_file.write_comments(test_txt)
+        hg_file.write_header(test_txt)
+        hg_file.write_data(test_txt)
+        hg_file.write_metadata_json(test_json)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0] == "HK14_CN"
@@ -192,7 +216,11 @@ class TestMetadataWriting:
         """Test metadata='both' writes both # comments and json sidecar."""
         test_txt = tmp_path / "test_out.txt"
         test_json = tmp_path / "test_out.json"
-        hg_file.write_data(test_txt, write_comments=True, write_header=True, metadata="both")
+        hg_file.write_metadata(test_txt)
+        hg_file.write_comments(test_txt)
+        hg_file.write_header(test_txt)
+        hg_file.write_data(test_txt)
+        hg_file.write_metadata_json(test_json)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0].startswith("# --- Measurement Information ---")
@@ -202,7 +230,11 @@ class TestMetadataWriting:
         """Test metadata=True writes both header and json."""
         test_txt = tmp_path / "test_out.txt"
         test_json = tmp_path / "test_out.json"
-        hg_file.write_data(test_txt, write_comments=True, write_header=True, metadata=True)
+        hg_file.write_metadata(test_txt)
+        hg_file.write_comments(test_txt)
+        hg_file.write_header(test_txt)
+        hg_file.write_data(test_txt)
+        hg_file.write_metadata_json(test_json)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0].startswith("# --- Measurement Information ---")
@@ -211,7 +243,8 @@ class TestMetadataWriting:
     def test_column_header_flag(self, hg_file, tmp_path) -> None:
         """Test write_header=False suppresses column headers row."""
         test_txt = tmp_path / "test_out.txt"
-        hg_file.write_data(test_txt, write_comments=True, write_header=False, metadata=False)
+        hg_file.write_comments(test_txt)
+        hg_file.write_data(test_txt)
         lines = test_txt.read_text(encoding="utf-8").strip().splitlines()
 
         assert lines[0] == "HK14_CN"
