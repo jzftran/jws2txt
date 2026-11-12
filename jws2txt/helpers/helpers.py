@@ -71,7 +71,7 @@ MetadataMode = Optional[Literal["header", "json", "both"]]
 def _open_text(
     target: str | PathLike[str] | TextIO,
 ) -> Generator[TextIO, None, None]:
-    """Yield a writable text stream, opening paths exclusively."""
+    """Yield a writable text stream, appending to file paths."""
     if isinstance(
         target,
         TextIO,
@@ -351,9 +351,6 @@ class JWSFile:
             out_file: Target file path or writable stream.
             delimiter: Column delimiter (default tab).
 
-        Raises:
-            FileExistsError: If ``out_file`` is a path that already exists.
-
         """
         with _open_text(out_file) as f:
             csv.writer(f, delimiter=delimiter).writerows(
@@ -387,7 +384,7 @@ class JWSFile:
         self,
         out_file: str | PathLike[str] | TextIO,
     ) -> None:
-        """Write metadata as comment lines to a text file."""
+        """Write sample name and comment rows to a text file."""
         with _open_text(out_file) as f:
             csv.writer(f, delimiter="\t").writerows(
                 (line for line in self.iter_comment_rows()),
@@ -397,7 +394,7 @@ class JWSFile:
         self,
         out_file: str | PathLike[str] | TextIO,
     ) -> None:
-        """Write metadata as comment lines to a text file."""
+        """Write the column header row to a text file."""
         with _open_text(out_file) as f:
             csv.writer(f, delimiter="\t").writerows(
                 (line for line in self.iter_header_rows()),
