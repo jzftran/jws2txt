@@ -11,7 +11,10 @@ authors = [
 ]
 description = "A JASCO file (*.jws and *.jwb) to text file converter."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
+dependencies = [
+    "olefile~=0.47",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",
@@ -29,3 +32,37 @@ jws2txt = "jws2txt.jws2txt:main"
 
 [tool.hatch.version]
 path = "jws2txt/__init__.py"
+
+[tool.ruff]
+line-length = 80
+target-version = "py38"
+
+[tool.ruff.lint]
+select = ["ALL"]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5",
+]
+
+
+# from https://github.com/astral-sh/ruff/issues/4368
+# https://github.com/astral-sh/ruff/issues/4368
+[tool.ruff.lint.extend-per-file-ignores]
+
+"tests/**/*.py" = [
+    # These three should definitely be fine in tests:
+    "S101",    # Asserts are allowed in tests.
+    "ARG",     # Unused function arguments may be pytest fixtures.
+    "FBT",     # Boolean positional arguments are acceptable in tests.
+    
+    # These are more debatable:
+    "PLR2004", # Magic values in comparisons.
+    "S311",    # Pseudo-random generators are not suitable for cryptography.
+    "ANN",     # Type annotations are not required in tests.
+    "E741",    # Allow ambiguous variable names.
+]
+
+"jws2txt/**/*.py" = [
+    "PLR2004", # jws2txt parses OLE files; magic values in comparisons are unavoidable.
+]
